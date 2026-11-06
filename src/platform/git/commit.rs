@@ -2,9 +2,13 @@ use std::process::Command;
 
 use anyhow::Context;
 
-pub fn commit(message: &str) -> anyhow::Result<()> {
+pub fn commit(
+  message: &str,
+  no_verify: bool,
+) -> anyhow::Result<()> {
   let status = Command::new("git")
     .arg("commit")
+    .args(no_verify.then_some("-n"))
     .arg("-m")
     .arg(message)
     .status()
