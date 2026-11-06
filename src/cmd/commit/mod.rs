@@ -17,6 +17,10 @@ pub struct CommitCommand {
   #[arg(long = "dry")]
   pub dry_run: bool,
 
+  /// Skip pre-commit and commit-msg hooks (passes -n to git commit)
+  #[arg(short = 'n')]
+  pub no_verify: bool,
+
   #[command(flatten)]
   pub env: EnvConfig,
 }
@@ -54,7 +58,7 @@ pub fn main(args: CommitCommand) -> anyhow::Result<()> {
     return Ok(());
   }
 
-  git::commit(response)?;
+  git::commit(response, args.no_verify)?;
 
   Ok(())
 }
