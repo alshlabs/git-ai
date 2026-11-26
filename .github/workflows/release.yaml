@@ -23,16 +23,47 @@ jobs:
       GITHUB_REPOSITORY: ${{ steps.generate.outputs.GITHUB_REPOSITORY }}
     steps:
       - id: generate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -ex
 
           GITHUB_URL="https://api.github.com/repos/${{ github.repository }}"
-          LAST_VERSION=$(curl -sSL "$GITHUB_URL/releases/latest" | jq -r '.tag_name // empty')
 
-          if [ -z "$LAST_VERSION" ]; then
+          # Keep the response body and HTTP status so failures are diagnosable
+          # instead of collapsing into an empty LAST_VERSION.
+          RESULT_FILE="$(mktemp)"
+          trap 'rm -f "$RESULT_FILE"' EXIT
+
+          HTTP_CODE=$(curl -sSL --retry 5 --retry-all-errors \
+            -o "$RESULT_FILE" -w '%{http_code}' \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$GITHUB_URL/releases/latest")
+          echo "GitHub API responded with HTTP $HTTP_CODE"
+
+          if [ "$HTTP_CODE" = "404" ]; then
             # No releases yet
             # NEW_VERSION="0.0.1"
-            echo "No version found"
+            echo "No version found (no releases published yet)"
+            exit 1
+          fi
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Failed to fetch latest release (HTTP $HTTP_CODE), response body:"
+            cat "$RESULT_FILE"
+            exit 1
+          fi
+
+          if ! LAST_VERSION=$(jq -r '.tag_name // empty' "$RESULT_FILE"); then
+            echo "Latest release response was not valid JSON, response body:"
+            cat "$RESULT_FILE"
+            exit 1
+          fi
+
+          if [ -z "$LAST_VERSION" ]; then
+            echo "Latest release has no tag_name, response body:"
+            cat "$RESULT_FILE"
             exit 1
           else
             IFS='.' read -r MAJOR MINOR PATCH <<< "$LAST_VERSION"
