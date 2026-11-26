@@ -41,6 +41,10 @@ struct EnvConfig {
   /// GitHub Personal Access Token
   #[arg(long = "gh-token", env = "GH_TOKEN", hide_env_values = true)]
   pub gh_token: Option<String>,
+
+  /// Gitea Personal Access Token
+  #[arg(long = "gitea-token", env = "GITEA_TOKEN", hide_env_values = true)]
+  pub gitea_token: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -48,7 +52,7 @@ enum Commands {
   /// Create a commit with an automatically generated summary
   #[clap(name = "commit", alias = "c")]
   Commit(cmd::commit::CommitCommand),
-  /// Create a GitHub PR with any automatically generated title and description
+  /// Create a GitHub or Gitea PR with any automatically generated title and description
   #[clap(name = "pull-request", alias = "pr")]
   PullRequest(cmd::pull_request::PullRequestCommand),
   /// Update git-ai to the latest release

@@ -5,11 +5,12 @@ use crate::platform::agent::openai_api::OpenAIConversation;
 use crate::platform::agent::openai_api::OpenAIConversationOptions;
 use crate::platform::gh;
 use crate::platform::git;
+use crate::platform::gitea;
 
 #[derive(Debug, clap::Parser)]
 pub struct PullRequestCommand {
   /// The branch to open the pull request against.
-  /// Defaults to the repository's default branch as reported by GitHub.
+  /// Defaults to the repository's default branch as reported by the git host.
   #[arg(long = "base")]
   pub base: Option<String>,
 
@@ -66,13 +67,22 @@ pub fn main(args: PullRequestCommand) -> anyhow::Result<()> {
   // 1. Ensure inside a git repo and determine the current branch
   let current_branch = git::current_branch()?;
 
-  // 2. Resolve the base branch: use the supplied value, otherwise ask GitHub
-  //    for the repository's default branch.
+  let remote = git::remote_url()?;
+  let gitea = match remote.contains("github.com") {
+    true => None,
+    false => Some(gitea::Repo::from_remote(&remote, args.env.gitea_token)?),
+  };
+
+  // 2. Resolve the base branch: use the supplied value, otherwise ask the git
+  //    host for the repository's default branch.
   let base = match args.base {
     Some(base) => base,
     None => {
-      println!("No --base supplied, detecting default branch via GitHub...");
-      let base = gh::default_branch()?;
+      println!("No --base supplied, detecting default branch via the git host...");
+      let base = match &gitea {
+        Some(repo) => repo.default_branch()?,
+        None => gh::default_branch()?,
+      };
       println!("Using base branch '{}'", base);
       base
     }
@@ -123,15 +133,27 @@ pub fn main(args: PullRequestCommand) -> anyhow::Result<()> {
 
   // 7. Update the existing pull request for this branch if one is open,
   //    otherwise create a new one.
-  match gh::find_pull_request(&current_branch)? {
+  let existing = match &gitea {
+    Some(repo) => repo.find_pull_request(&current_branch)?,
+    None => gh::find_pull_request(&current_branch)?,
+  };
+  match existing {
     Some(number) => {
       println!("Updating existing Pull Request #{number}...");
-      gh::edit_pull_request(number, &base, &generated.title, &generated.body)?;
+      match &gitea {
+        Some(repo) => repo.edit_pull_request(number, &base, &generated.title, &generated.body)?,
+        None => gh::edit_pull_request(number, &base, &generated.title, &generated.body)?,
+      }
       println!("PR #{number} updated successfully!");
     }
     None => {
       println!("Creating Pull Request...");
-      gh::create_pull_request(&base, &generated.title, &generated.body)?;
+      match &gitea {
+        Some(repo) => {
+          repo.create_pull_request(&current_branch, &base, &generated.title, &generated.body)?
+        }
+        None => gh::create_pull_request(&base, &generated.title, &generated.body)?,
+      }
       println!("PR created successfully!");
     }
   }

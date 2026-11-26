@@ -104,3 +104,22 @@ pub fn push_branch(branch: &str) -> anyhow::Result<()> {
 
   Ok(())
 }
+
+pub fn remote_url() -> anyhow::Result<String> {
+  let output = Command::new("git")
+    .args(["remote", "get-url", "origin"])
+    .output()
+    .context("failed to run git remote get-url origin")?;
+
+  if !output.status.success() {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    anyhow::bail!(
+      "git remote get-url origin failed (status {}): {}",
+      output.status,
+      stderr.trim()
+    );
+  }
+
+  let url = String::from_utf8(output.stdout).context("invalid UTF-8 from git remote get-url")?;
+  Ok(url.trim().to_string())
+}
