@@ -1,3 +1,4 @@
+use anyhow::Context;
 use reqwest::blocking::Client;
 use serde::Deserialize;
 use serde::Serialize;
@@ -14,7 +15,34 @@ pub enum Role {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
   pub role: Role,
+  #[serde(deserialize_with = "content_text")]
   pub content: String,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum Content {
+  Text(String),
+  Parts(Vec<ContentPart>),
+}
+
+#[derive(Deserialize)]
+struct ContentPart {
+  #[serde(rename = "type")]
+  kind: String,
+  text: Option<String>,
+}
+
+// Some providers return `content` as a list of typed parts (e.g. `thinking` + `text`) instead of a string.
+fn content_text<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
+  Ok(match Content::deserialize(deserializer)? {
+    Content::Text(text) => text,
+    Content::Parts(parts) => parts
+      .into_iter()
+      .filter(|part| part.kind == "text")
+      .filter_map(|part| part.text)
+      .collect(),
+  })
 }
 
 #[derive(Debug, Clone)]
@@ -106,7 +134,9 @@ impl OpenAIConversation {
       anyhow::bail!("API request failed (status {}): {}", status, err_body);
     }
 
-    let parsed: ChatCompletionResponse = response.json()?;
+    let body = response.text()?;
+    let parsed: ChatCompletionResponse =
+      serde_json::from_str(&body).with_context(|| format!("unexpected API response: {body}"))?;
 
     let assistant_msg = parsed
       .choices
