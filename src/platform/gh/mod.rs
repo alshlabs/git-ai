@@ -91,11 +91,13 @@ pub fn create_pull_request(
   base: &str,
   title: &str,
   body: &str,
+  draft: bool,
 ) -> anyhow::Result<()> {
   let status = Command::new("gh")
     .args([
       "pr", "create", "--base", base, "--title", title, "--body", body,
     ])
+    .args(draft.then_some("--draft"))
     .status()
     .context("failed to run gh pr create")?;
 

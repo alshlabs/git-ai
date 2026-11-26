@@ -96,7 +96,13 @@ impl Repo {
     base: &str,
     title: &str,
     body: &str,
+    draft: bool,
   ) -> anyhow::Result<()> {
+    // Gitea has no draft flag; a `WIP:` title prefix marks a PR as a draft.
+    let title = match draft {
+      true => format!("WIP: {title}"),
+      false => title.to_string(),
+    };
     let payload = json!({ "head": head, "base": base, "title": title, "body": body });
     self.send(
       self

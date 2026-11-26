@@ -20,6 +20,10 @@ pub struct PullRequestCommand {
   #[arg(long = "dry")]
   pub dry_run: bool,
 
+  /// Open new pull requests as drafts
+  #[arg(long = "draft")]
+  pub draft: bool,
+
   #[command(flatten)]
   pub env: EnvConfig,
 }
@@ -149,10 +153,14 @@ pub fn main(args: PullRequestCommand) -> anyhow::Result<()> {
     None => {
       println!("Creating Pull Request...");
       match &gitea {
-        Some(repo) => {
-          repo.create_pull_request(&current_branch, &base, &generated.title, &generated.body)?
-        }
-        None => gh::create_pull_request(&base, &generated.title, &generated.body)?,
+        Some(repo) => repo.create_pull_request(
+          &current_branch,
+          &base,
+          &generated.title,
+          &generated.body,
+          args.draft,
+        )?,
+        None => gh::create_pull_request(&base, &generated.title, &generated.body, args.draft)?,
       }
       println!("PR created successfully!");
     }
